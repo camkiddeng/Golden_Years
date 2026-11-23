@@ -202,7 +202,7 @@ def append_log(path, record):
         os.fsync(stream.fileno())
 
 
-def organize(root, report=print):
+def organize(root, report=print, progress=None):
     root = Path(root).absolute()
     check_dirs(root)
     counts = Counter()
@@ -224,6 +224,10 @@ def organize(root, report=print):
     for file in files:
         counts["scan", category(file.path)] += 1
     summary("扫描完成", "scan")
+    completed = counts["failed", "Photos"] + counts["failed", "Videos"]
+    total = completed + len(files)
+    if progress is not None:
+        progress(completed, total)
     index = defaultdict(list)
     hashes = {}
     counters = {}
@@ -282,6 +286,9 @@ def organize(root, report=print):
                     folder.rmdir()  # 仅回收本次创建且仍为空的目录
                 except OSError:
                     break
+        completed += 1
+        if progress is not None:
+            progress(completed, total)
     summary("成功归档", "archived")
     summary("重复文件", "duplicate")
     summary("失败", "failed")

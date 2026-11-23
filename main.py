@@ -4,14 +4,15 @@ import sys
 
 from PySide6.QtCore import QThread, Signal, Slot
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLineEdit,
-                               QPlainTextEdit, QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel, QLineEdit,
+                               QPlainTextEdit, QProgressBar, QPushButton, QVBoxLayout, QWidget)
 
 from organizer import organize
 
 
 class Worker(QThread):
     message = Signal(str)
+    progress = Signal(int, int)
 
     def __init__(self, root, parent):
         super().__init__(parent)
@@ -19,7 +20,7 @@ class Worker(QThread):
 
     def run(self):
         try:
-            organize(self.root, self.message.emit)
+            organize(self.root, self.message.emit, self.progress.emit)
         except Exception as error:
             self.message.emit(f"任务中止：{error}")
 
@@ -36,6 +37,9 @@ class Window(QWidget):
         self.choose = QPushButton("选择")
         self.execute = QPushButton("执行")
         self.execute.setEnabled(False)
+        self.file_count = QLabel()
+        self.progress_bar = QProgressBar()
+        self.update_progress(0, 0)
         self.output = QPlainTextEdit()
         self.output.setReadOnly(True)
         row = QHBoxLayout()
@@ -43,6 +47,8 @@ class Window(QWidget):
             row.addWidget(widget)
         layout = QVBoxLayout(self)
         layout.addLayout(row)
+        layout.addWidget(self.file_count)
+        layout.addWidget(self.progress_bar)
         layout.addWidget(self.output)
         self.choose.clicked.connect(self.select_folder)
         self.execute.clicked.connect(self.start)
@@ -60,15 +66,22 @@ class Window(QWidget):
             self.path.setText(root)
             self.execute.setEnabled(True)
 
+    @Slot(int, int)
+    def update_progress(self, completed, total):
+        self.file_count.setText(f"已处理文件数量  {completed}/{total}")
+        self.progress_bar.setValue(100 * completed // total if total else 0)
+
     @Slot()
     def start(self):
         if self.worker is not None or not self.path.text():
             return
         self.choose.setEnabled(False)
         self.execute.setEnabled(False)
+        self.update_progress(0, 0)
         self.output.setPlainText("正在扫描主文件夹…")
         self.worker = Worker(self.path.text(), self)
         self.worker.message.connect(self.output.appendPlainText)
+        self.worker.progress.connect(self.update_progress)
         self.worker.finished.connect(self.finish)
         self.worker.start()
 
